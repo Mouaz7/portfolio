@@ -26,7 +26,7 @@
 
 | File | What it is |
 | :-- | :-- |
-| [`skill-icon-sources.json`](skill-icon-sources.json) | Source URL and SHA-256 for every Skills icon. Read by the app and the design lock — it is data, not prose. |
+| [`skill-icon-sources.json`](skill-icon-sources.json) | Source URL and SHA-256 for every Skills icon. Read by the app and the design lock. It is data, not prose. |
 | [`assets/`](assets) | Screenshots used in the project README. |
 
 ## ✅ Before you push

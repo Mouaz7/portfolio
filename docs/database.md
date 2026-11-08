@@ -23,7 +23,7 @@ The migration also creates an index on `(is_active, sort_order, created_at desc)
 
 `supabase/migrations/20260727_dynamic_content_management.sql` adds data-managed Home profile, role and capability content, and adds safe ordering/visibility fields to Skills, Journey, contact links and projects. It is additive and preserves existing rows. It also created `site_cv` and `profile`, which the app no longer reads; `20261108120000_drop_unused_schema.sql` drops them.
 
-The local `supabase/migrations/20260923185543_add_cpp_teaching_assistant_2026_2027.sql` adds a separate C++ Teaching Assistant appointment for September 2026–June 2027 and Swedish/Arabic translations. It does not replace the September 2025–June 2026 row. The seed includes both periods; this file's presence is not proof that the migration has run on a remote database.
+The local `supabase/migrations/20260923185543_add_cpp_teaching_assistant_2026_2027.sql` adds a separate C++ Teaching Assistant appointment for September 2026 to June 2027 and Swedish/Arabic translations. It does not replace the September 2025 to June 2026 row. The seed includes both periods; this file's presence is not proof that the migration has run on a remote database.
 
 ## Runtime Tables
 
@@ -78,7 +78,7 @@ insert into supabase_migrations.schema_migrations (version, name)
 values ('20261108120100', 'drop_skill_icon_bucket');
 ```
 
-**Migration history differs from the repository.** Several earlier migrations (for example the August–September 2026 Skills icon, Journey asset and contact-upload changes) are recorded under other names or not at all (they may have been applied by hand), so `supabase db push` would try to run them again. Apply new migrations by hand in the SQL Editor and record each one as above, or repair the history (`supabase migration repair`) before using `db push`.
+**Migration history differs from the repository.** Several earlier migrations (for example the August to September 2026 Skills icon, Journey asset and contact-upload changes) are recorded under other names or not at all (they may have been applied by hand), so `supabase db push` would try to run them again. Apply new migrations by hand in the SQL Editor and record each one as above, or repair the history (`supabase migration repair`) before using `db push`.
 
 ## Storage
 

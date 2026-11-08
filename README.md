@@ -4,11 +4,11 @@
   </a>
 </p>
 
-<h1 align="center">Mouaz Naji — Developer Portfolio</h1>
+<h1 align="center">Mouaz Naji: Developer Portfolio</h1>
 
 <p align="center">
   <strong>Projects, skills and experience, presented as a GitHub-style developer workspace.</strong><br />
-  English · Svenska · العربية &nbsp;—&nbsp; light and dark &nbsp;—&nbsp; phone, tablet and desktop
+  English · Svenska · العربية &nbsp;·&nbsp; light and dark &nbsp;·&nbsp; phone, tablet and desktop
 </p>
 
 <p align="center">
@@ -141,7 +141,7 @@ everywhere: new and old browsers, fast and slow devices, in three languages.
 | :-- | :-- |
 | **Framework** | [Next.js 16](https://nextjs.org) (App Router) · [React 19](https://react.dev) · [TypeScript 5.9](https://www.typescriptlang.org) |
 | **Styling** | [Tailwind CSS 4](https://tailwindcss.com) · CSS variables · CSS Modules |
-| **Data** | [Supabase](https://supabase.com) — Postgres with row-level security and private Storage |
+| **Data** | [Supabase](https://supabase.com): Postgres with row-level security and private Storage |
 | **Email** | [Nodemailer](https://nodemailer.com) over SMTP |
 | **Hosting** | [Vercel](https://vercel.com) · Web Analytics · Speed Insights |
 | **Testing** | [Jest](https://jestjs.io) · [React Testing Library](https://testing-library.com) · [Playwright](https://playwright.dev) with axe · [pgTAP](https://pgtap.org) |
@@ -183,7 +183,7 @@ Open **[localhost:3000](http://localhost:3000)** once the terminal prints
 | `npm run build` | Production build (generates the legacy CSS first). |
 | `npm start` | Serve the production build. |
 | `npm run test:ci` | Unit tests with coverage thresholds. |
-| `npm run test:e2e` | Playwright browser tests — build first, see the [testing guide](docs/testing-guide.md). |
+| `npm run test:e2e` | Playwright browser tests. Build first, see the [testing guide](docs/testing-guide.md). |
 | `npm run sync:projects` | Import new public GitHub repositories into Supabase. |
 
 ## 🗂️ Project structure
@@ -233,7 +233,7 @@ Full details: [Deployment and CI](docs/deployment.md).
 | ☁️ [Deployment and CI](docs/deployment.md) | Environment variables, Vercel, post-deploy checks and GitHub Actions |
 | 🧪 [Testing guide](docs/testing-guide.md) | Jest, Playwright, design and pixel locks, visual and performance checks |
 | 🔒 [Security](docs/security.md) | Content Security Policy, attachments, secret scanning and licenses |
-| 🛡️ [Privacy data inventory](docs/privacy-data-inventory.md) | Every piece of data the site handles — the source for `/privacy` |
+| 🛡️ [Privacy data inventory](docs/privacy-data-inventory.md) | Every piece of data the site handles, and the source for `/privacy` |
 
 All documents are listed in the [documentation hub](docs/README.md). To report
 a vulnerability, see the [security policy](.github/SECURITY.md).
@@ -242,9 +242,9 @@ a vulnerability, see the [security policy](.github/SECURITY.md).
 
 Copyright © 2026 Mouaz Naji. All rights reserved.
 
-- **Source code** — publicly visible, but **not open source**. See [LICENSE](LICENSE).
-- **Personal and brand assets** — covered by [ASSETS_LICENSE.md](ASSETS_LICENSE.md).
-- **Third-party libraries, fonts and icons** — keep their own licenses, listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- **Source code:** publicly visible, but **not open source**. See [LICENSE](LICENSE).
+- **Personal and brand assets:** covered by [ASSETS_LICENSE.md](ASSETS_LICENSE.md).
+- **Third-party libraries, fonts and icons:** keep their own licenses, listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ---
 
