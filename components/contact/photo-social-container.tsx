@@ -91,7 +91,8 @@ const PhotoSocialContainer: NextPage<PhotoSocialContainerType> = ({
                 href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label={link.title}
+                // The spoken name contains the visible text (WCAG 2.5.3).
+                aria-label={isGitHubProfile(link.href) ? `${link.title}: Mouaz7` : link.title}
                 title={link.title}
                 className="contact-profile-social-link"
               >

@@ -70,7 +70,8 @@ export default function LanguageSwitcher() {
         ref={triggerRef}
         type="button"
         className="inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-xl border border-[var(--surface-border)] bg-[rgba(var(--bg-rgb),0.18)] px-2 text-[var(--fg)] backdrop-blur-md transition-colors hover:border-accent/50 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-        aria-label={dictionary.nav.chooseLanguage}
+        // The spoken name contains the visible language code (WCAG 2.5.3).
+        aria-label={`${dictionary.nav.chooseLanguage}: ${locale.toUpperCase()}`}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => {

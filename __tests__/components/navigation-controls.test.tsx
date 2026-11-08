@@ -17,7 +17,7 @@ describe("LanguageSwitcher disclosure", () => {
 
   it("exposes a disclosure with the active language marked as current", () => {
     render(<LanguageSwitcher />);
-    const trigger = screen.getByRole("button", { name: "Choose language" });
+    const trigger = screen.getByRole("button", { name: /Choose language/ });
 
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(trigger).not.toHaveAttribute("aria-controls");
@@ -42,7 +42,7 @@ describe("LanguageSwitcher disclosure", () => {
     const outerEscape = jest.fn();
     document.addEventListener("keydown", outerEscape);
     render(<LanguageSwitcher />);
-    const trigger = screen.getByRole("button", { name: "Choose language" });
+    const trigger = screen.getByRole("button", { name: /Choose language/ });
 
     fireEvent.click(trigger);
     screen.getAllByRole("link")[0].focus();
@@ -62,7 +62,7 @@ describe("LanguageSwitcher disclosure", () => {
         <p>outside</p>
       </>,
     );
-    const trigger = screen.getByRole("button", { name: "Choose language" });
+    const trigger = screen.getByRole("button", { name: /Choose language/ });
 
     fireEvent.click(trigger);
     fireEvent.pointerDown(screen.getAllByRole("link")[0]);
@@ -78,7 +78,7 @@ describe("LanguageSwitcher disclosure", () => {
     document.addEventListener("click", blockNavigation);
 
     render(<LanguageSwitcher />);
-    fireEvent.click(screen.getByRole("button", { name: "Choose language" }));
+    fireEvent.click(screen.getByRole("button", { name: /Choose language/ }));
 
     const swedish = screen.getAllByRole("link").find((link) => link.getAttribute("hreflang") === "sv")!;
     expect(swedish).toHaveAttribute("href", "/sv?technology=React");
