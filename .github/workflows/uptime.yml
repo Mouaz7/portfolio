@@ -1,0 +1,31 @@
+name: Uptime
+
+# Checks the public health endpoint of the production deployment. The endpoint
+# needs no secret and answers 503 when required production settings are
+# missing, so a failed run means the site is down or misconfigured.
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  health:
+    name: Production health check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Request /api/health
+        env:
+          HEALTH_URL: https://mouazdev.vercel.app/api/health
+        run: |
+          curl --fail --silent --show-error --max-time 30 \
+            --retry 2 --retry-delay 15 --retry-all-errors \
+            "$HEALTH_URL"

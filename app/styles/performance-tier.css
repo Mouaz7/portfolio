@@ -1,0 +1,31 @@
+/* Devices that render the background without usable GPU acceleration
+ * (html[data-render-mode="software"], set by lib/background/page-state.ts
+ * when it switches to the compositor crossfade). There, every backdrop blur
+ * re-blurs the animated background on the CPU for every frame, so these
+ * devices get the same panels without the blur, and calmer journey rails.
+ * Never set on devices with working GPU acceleration, not even when their GPU
+ * struggles and the background itself switches to the cheaper crossfade. */
+
+html[data-render-mode="software"] .git-graph .git-head,
+html[data-render-mode="software"] .git-graph .commit-card {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-render-mode="software"] :is(
+  [data-home-capability],
+  [data-privacy-page] article,
+  .home-hero-actions,
+  .home-download-cta,
+  .backdrop-blur-md,
+  .backdrop-blur-xl
+) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Half the update rate and no glow filter on the flowing rail lines. */
+html[data-render-mode="software"] .rail-flow-line {
+  animation-timing-function: steps(57);
+  filter: none;
+}

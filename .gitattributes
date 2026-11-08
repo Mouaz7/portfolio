@@ -1,0 +1,15 @@
+# Text files are stored with LF line endings on every platform.
+* text=auto eol=lf
+
+# Served and design-locked byte for byte: never convert.
+*.svg binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.gif binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

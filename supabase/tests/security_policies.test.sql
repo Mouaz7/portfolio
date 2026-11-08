@@ -1,0 +1,143 @@
+begin;
+select plan(38);
+
+select ok((select relrowsecurity from pg_class where oid = 'public.project'::regclass), 'project has RLS');
+select ok(to_regclass('public.site_cv') is null and to_regclass('public.profile') is null, 'unused CV and profile tables are removed');
+select ok(to_regclass('public.rag_chunk') is null, 'retired AI chunks are removed');
+select ok((select relrowsecurity from pg_class where oid = 'public.contact_submission'::regclass), 'contact submissions have RLS');
+select ok((select relrowsecurity from pg_class where oid = 'public.content_translation'::regclass), 'content translations have RLS');
+
+select ok(has_table_privilege('anon', 'public.project', 'select'), 'anon can select public projects');
+select ok(has_table_privilege('anon', 'public.skill', 'select'), 'anon can select active skills');
+select ok(has_table_privilege('anon', 'public.journey_item', 'select'), 'anon can select active journey rows');
+select ok(has_table_privilege('anon', 'public.contact_social', 'select'), 'anon can select approved social links');
+select ok(has_table_privilege('anon', 'public.content_translation', 'select'), 'anon can select localized public content');
+select ok(not has_table_privilege('anon', 'public.project', 'insert'), 'anon cannot insert projects');
+select ok(not has_table_privilege('anon', 'public.content_translation', 'insert'), 'anon cannot insert translations');
+select ok(not exists (select 1 from pg_extension where extname = 'vector'), 'unused vector extension is removed');
+select ok(
+  not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and ((table_name = 'skill' and column_name = 'icon_bucket')
+        or (table_name = 'skill_category' and column_name = 'accent_rgb'))
+  ),
+  'unused Skills columns are removed'
+);
+select ok(
+  to_regclass('public.skill_category_sort_idx') is null
+  and to_regclass('public.journey_item_start_date_idx') is null
+  and to_regclass('public.contact_social_active_sort_idx') is null,
+  'duplicate indexes are removed'
+);
+select ok(to_regclass('public.rag_source') is null, 'retired AI sources are removed');
+select ok(not has_table_privilege('anon', 'public.contact_submission', 'select'), 'anon cannot read contact submissions');
+
+insert into public.home_capability (id, title, description, icon_key, sort_order, is_active)
+values
+  ('pgtap-active-parent', 'Active test', 'Visible parent', 'quality', 9001, true),
+  ('pgtap-inactive-parent', 'Inactive test', 'Hidden parent', 'quality', 9002, false);
+
+insert into public.content_translation (entity_type, entity_id, locale, fields)
+values
+  ('home_capability', 'pgtap-active-parent', 'sv', '{"title":"Synlig"}'::jsonb),
+  ('home_capability', 'pgtap-inactive-parent', 'sv', '{"title":"Dold"}'::jsonb);
+
+set local role anon;
+select is(
+  (select count(*) from public.content_translation where entity_id = 'pgtap-active-parent'),
+  1::bigint,
+  'anon can read a translation whose parent is active'
+);
+select is(
+  (select count(*) from public.content_translation where entity_id = 'pgtap-inactive-parent'),
+  0::bigint,
+  'translations for inactive parents do not leak to anon'
+);
+reset role;
+
+select ok(not has_table_privilege('authenticated', 'public.project', 'select'), 'authenticated receives no extra project access');
+select ok(not has_table_privilege('authenticated', 'public.contact_submission', 'insert'), 'authenticated cannot insert contact submissions');
+select ok(has_table_privilege('service_role', 'public.request_quota', 'insert'), 'service role can manage quotas');
+select ok(has_table_privilege('service_role', 'public.contact_submission', 'select'), 'service role can read contact submissions');
+
+select ok(not exists (select 1 from pg_proc where proname = 'match_rag_chunks'), 'retired AI search is removed');
+select ok(to_regclass('public.rag_index_run') is null and to_regclass('public.job_lease') is null, 'retired AI jobs are removed');
+select ok(to_regprocedure('public.replace_rag_source(text,text,text,text,text,jsonb,jsonb)') is null, 'retired AI indexing is removed');
+select ok(
+  to_regprocedure('public.acquire_job_lease(text,integer)') is null
+  and to_regprocedure('public.release_job_lease(text,uuid)') is null,
+  'retired AI job lock functions are removed'
+);
+select ok(not has_function_privilege('anon', 'public.acquire_request_budget(text,text,text,integer,integer,integer,integer,integer,integer,integer,integer,boolean)', 'execute'), 'anon cannot consume internal quotas directly');
+select is((select public from storage.buckets where id = 'contact-uploads'), false, 'contact upload bucket is private');
+select is(
+  (select allowed_mime_types from storage.buckets where id = 'contact-uploads'),
+  array['application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'text/plain']::text[],
+  'contact bucket rejects office documents and accepts the five safe MIME families'
+);
+select is((select public from storage.buckets where id = 'private-cv'), false, 'CV bucket is private');
+select is(
+  (select allowed_mime_types from storage.buckets where id = 'private-cv'),
+  array['application/pdf']::text[],
+  'CV bucket accepts PDF only'
+);
+
+set local timezone = 'America/New_York';
+select ok(
+  (public.acquire_request_budget(
+    'timezone_test', repeat('a', 43), repeat('b', 43),
+    5, 600, 10, 3600, 100, 86400, 2, 45, true
+  )->>'allowed')::boolean,
+  'request budget works outside UTC'
+);
+select ok(
+  exists(
+    select 1 from public.request_quota
+    where action = 'timezone_test'
+      and bucket_start <= now()
+      and expires_at > now()
+  ),
+  'request budget stores absolute timestamptz windows'
+);
+
+create temporary table timezone_lease_result as
+select public.acquire_concurrency_lease(
+  'timezone_lease_test', repeat('c', 43), 1, 45
+) as lease_id;
+
+select ok(
+  (select lease_id is not null from timezone_lease_result)
+  and exists(
+    select 1 from public.request_lease
+    where action = 'timezone_lease_test' and expires_at > now()
+  ),
+  'concurrency lease expiry remains valid outside UTC'
+);
+
+select lives_ok(
+  $$select public.sync_github_projects(
+    '[{"title":"Chess Game","description":"","category":"Systems","github_url":"https://github.com/Mouaz7/Chess-Game","languages":["C++"],"cover_image_href":"/project-icons/cplusplus.svg","sort_order":304,"source_kind":"github","github_full_name":"mouaz7/chess-game"}]'::jsonb,
+    array['mouaz7/chess-game']::text[]
+  )$$,
+  'GitHub project sync accepts canonical repository casing'
+);
+select lives_ok(
+  $$select public.sync_github_projects(
+    '[{"title":"Chess Game","description":"","category":"Systems","github_url":"https://github.com/Mouaz7/chess-game/","languages":["C++"],"cover_image_href":"/project-icons/cplusplus.svg","sort_order":304,"source_kind":"github","github_full_name":"Mouaz7/Chess-Game"}]'::jsonb,
+    array['mouaz7/chess-game']::text[]
+  )$$,
+  'GitHub project sync is idempotent across URL and name casing'
+);
+select is(
+  (
+    select count(*)
+    from public.project
+    where lower(github_full_name) = 'mouaz7/chess-game'
+  ),
+  1::bigint,
+  'GitHub project sync retains one normalized repository identity'
+);
+
+select * from finish();
+rollback;

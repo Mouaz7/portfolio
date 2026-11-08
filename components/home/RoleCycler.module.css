@@ -1,0 +1,23 @@
+/* Each role word slides in once when it appears. */
+.fadeslide {
+  display: inline-block;
+  animation: fadeslide var(--rcdur) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes fadeslide {
+  from {
+    opacity: 0.82;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fadeslide {
+    animation: none !important;
+  }
+}

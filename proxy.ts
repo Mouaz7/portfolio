@@ -1,0 +1,113 @@
+import { NextRequest, NextResponse } from "next/server";
+import {
+  defaultLocale,
+  detectLocale,
+  isLocale,
+  localeCookie,
+  localizedPath,
+  stripLocaleFromPathname,
+  type Locale,
+} from "@/lib/i18n/config";
+import {
+  buildContentSecurityPolicy,
+  publicSupabaseOrigin,
+} from "@/lib/security/csp.cjs";
+
+const LEGACY_PUBLIC_ROUTES = new Map([
+  ["/skills-page", "/skills"],
+  ["/projects-page", "/projects"],
+  ["/contact-page", "/contact"],
+]);
+
+export function proxy(request: NextRequest) {
+  const nonce = crypto.randomUUID().replaceAll("-", "");
+  const isDevelopment = process.env.NODE_ENV === "development";
+  const contentSecurityPolicy = buildContentSecurityPolicy({
+    scriptSrc: `'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    isDevelopment,
+    supabaseOrigin: publicSupabaseOrigin(process.env),
+  });
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", contentSecurityPolicy);
+
+  const pathname = request.nextUrl.pathname;
+  const firstSegment = pathname.split("/").filter(Boolean)[0];
+  const pathLocale = isLocale(firstSegment) ? firstSegment : null;
+  const inheritedLocale = request.headers.get("x-locale");
+
+  const unprefixedPathname = stripLocaleFromPathname(pathname);
+  const canonicalPathname = LEGACY_PUBLIC_ROUTES.get(unprefixedPathname);
+  if (canonicalPathname) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = localizedPath(
+      canonicalPathname,
+      pathLocale ?? defaultLocale,
+    );
+    const redirect = NextResponse.redirect(redirectUrl, 308);
+    redirect.headers.set("Content-Security-Policy", contentSecurityPolicy);
+    return redirect;
+  }
+
+  // English remains canonical without a prefix, so /en/... never creates
+  // duplicate indexable URLs.
+  if (pathLocale === defaultLocale) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = stripLocaleFromPathname(pathname);
+    const redirect = NextResponse.redirect(redirectUrl, 308);
+    redirect.cookies.set(localeCookie, defaultLocale, {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 365,
+      secure: process.env.NODE_ENV === "production",
+    });
+    redirect.headers.set("Content-Security-Policy", contentSecurityPolicy);
+    return redirect;
+  }
+
+  // On the first visit only, route the home page to the preferred language.
+  // Every other unprefixed URL is explicitly the canonical English version.
+  if (!pathLocale && pathname === "/" && !isLocale(inheritedLocale)) {
+    const savedLocale = request.cookies.get(localeCookie)?.value;
+    const preferredLocale: Locale = isLocale(savedLocale)
+      ? savedLocale
+      : detectLocale(request.headers.get("accept-language"));
+    if (preferredLocale !== defaultLocale) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = localizedPath(pathname, preferredLocale);
+      const redirect = NextResponse.redirect(redirectUrl, 307);
+      redirect.headers.set("Content-Security-Policy", contentSecurityPolicy);
+      return redirect;
+    }
+  }
+
+  const locale = pathLocale ?? (isLocale(inheritedLocale) ? inheritedLocale : defaultLocale);
+  requestHeaders.set("x-locale", locale);
+
+  const response = pathLocale
+    ? NextResponse.rewrite(
+      new URL(`${stripLocaleFromPathname(pathname)}${request.nextUrl.search}`, request.url),
+      { request: { headers: requestHeaders } },
+    )
+    : NextResponse.next({ request: { headers: requestHeaders } });
+
+  if (pathLocale) {
+    response.cookies.set(localeCookie, locale, {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 365,
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
+  response.headers.set("Content-Security-Policy", contentSecurityPolicy);
+  return response;
+}
+
+export const config = {
+  matcher: [
+    {
+      source: "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
+    },
+  ],
+};

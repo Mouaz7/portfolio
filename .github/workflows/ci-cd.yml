@@ -1,0 +1,347 @@
+name: Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to a pull request supersedes its running checks. Runs on main
+# always finish so every merged commit keeps a complete result.
+concurrency:
+  # Pull requests share a group (a new push cancels the old run); on main
+  # every commit gets its own group, so each one gets its own result.
+  group: quality-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: "22.x"
+
+jobs:
+  database:
+    name: Isolated migrations and pgTAP
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+        with:
+          version: 2.111.0
+
+      - name: Prepare isolated Supabase configuration
+        run: node scripts/prepare-supabase-ci.mjs
+
+      - name: Apply all migrations and test database policies
+        run: |
+          supabase start --workdir "$SUPABASE_CI_WORKDIR"
+          supabase db reset --local --workdir "$SUPABASE_CI_WORKDIR"
+          # Hosted Docker cleanup can occasionally fail after tests pass.
+          # A genuine test failure still fails after the second attempt.
+          for attempt in 1 2; do
+            if supabase test db --local --workdir "$SUPABASE_CI_WORKDIR"; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 2 ]; then
+              exit 1
+            fi
+
+            echo "Supabase test runner cleanup failed; retrying once..."
+            sleep 5
+          done
+
+      - name: Stop isolated Supabase stack
+        if: always() && env.SUPABASE_CI_WORKDIR != ''
+        continue-on-error: true
+        run: supabase stop --no-backup --workdir "$SUPABASE_CI_WORKDIR"
+
+  static:
+    name: Lint, types, dead code, design lock and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so the whitespace check can diff against the PR base
+          # or the previous push head.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies once
+        run: npm ci
+
+      - name: Reject whitespace errors in the change
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "No base commit for this event (new branch or manual run); skipping."
+            exit 0
+          fi
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "::warning::Base commit $BASE_SHA is not in the fetched history (force push?); skipping whitespace check."
+            exit 0
+          fi
+          git diff --check "$BASE_SHA" HEAD
+
+      - name: Lint (no warnings allowed)
+        run: npm run lint -- --max-warnings=0
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Dead code
+        run: npm run check:dead
+
+      - name: Design lock
+        run: npm run test:design-lock
+
+      - name: Unit tests with coverage
+        run: npm run test:ci
+
+  security:
+    name: Dependency audits, secret scans and licenses
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies once
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit complete dependency tree
+        run: npm audit --audit-level=high
+
+      - name: Scan the complete Git history with Gitleaks
+        run: npm run test:secrets:gitleaks
+
+      - name: Scan project-specific history patterns
+        run: npm run test:secrets
+
+      - name: Inventory dependency licenses
+        run: npm run test:licenses
+
+  quality:
+    name: Build, browser, Lighthouse and motion
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies once
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+        with:
+          version: 2.111.0
+
+      - name: Prepare isolated Supabase configuration
+        run: node scripts/prepare-supabase-ci.mjs
+
+      - name: Start isolated test database for application tests
+        run: |
+          supabase start --workdir "$SUPABASE_CI_WORKDIR"
+          supabase db reset --local --workdir "$SUPABASE_CI_WORKDIR"
+
+      - name: Export isolated CI runtime configuration
+        shell: bash
+        run: |
+          set -a
+          source <(supabase status --workdir "$SUPABASE_CI_WORKDIR" -o env)
+          set +a
+
+          publishable_key="${PUBLISHABLE_KEY:-${ANON_KEY:-}}"
+          secret_key="${SECRET_KEY:-${SERVICE_ROLE_KEY:-}}"
+
+          test -n "$API_URL"
+          test -n "$publishable_key"
+          test -n "$secret_key"
+
+          echo "::add-mask::$secret_key"
+
+          rate_limit_pepper="$(openssl rand -hex 32)"
+          session_cookie_secret="$(openssl rand -hex 32)"
+          cron_secret="$(openssl rand -hex 32)"
+          revalidate_secret="$(openssl rand -hex 32)"
+
+          echo "::add-mask::$rate_limit_pepper"
+          echo "::add-mask::$session_cookie_secret"
+          echo "::add-mask::$cron_secret"
+          echo "::add-mask::$revalidate_secret"
+
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$publishable_key"
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_PUBLISHABLE_KEY=$publishable_key"
+            echo "SUPABASE_SECRET_KEY=$secret_key"
+            echo "RATE_LIMIT_PEPPER=$rate_limit_pepper"
+            echo "SESSION_COOKIE_SECRET=$session_cookie_secret"
+            echo "CRON_SECRET=$cron_secret"
+            echo "REVALIDATE_SECRET=$revalidate_secret"
+          } >> "$GITHUB_ENV"
+
+      # https://nextjs.org/docs/app/guides/ci-build-caching (distDir is .next for
+      # production builds; .next-dev is only used by the development server).
+      - name: Restore Next.js build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}/.next/cache
+          # New cache whenever packages or source files change.
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('app/**', 'components/**', 'hooks/**', 'lib/**', 'postcss/**', 'tooling/**', 'public/**', '*.js', '*.mjs', '*.ts', 'tsconfig.json') }}
+          # If only source files changed, rebuild from a prior cache.
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-
+
+      - name: Production build
+        run: npm run build
+
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Playwright browsers
+        id: playwright_cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          # ImageOS: WebKit builds belong to one OS release.
+          key: ${{ runner.os }}-${{ env.ImageOS }}-playwright-${{ steps.playwright.outputs.version }}
+
+      # Browsers come from the cache when the Playwright version is unchanged;
+      # the operating-system libraries they need are never cached.
+      - name: Install browser engines
+        if: steps.playwright_cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Install browser system dependencies
+        if: steps.playwright_cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium firefox webkit
+
+      - name: Browser and accessibility tests
+        run: npm run test:e2e
+
+      - name: Pixel comparison against the pre-change baseline
+        run: npm run test:pixel-lock
+
+      - name: Upload visual verification images
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: visual-verification
+          path: test-results/visual-actual/
+          retention-days: 7
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Lighthouse CI
+        run: npm run test:lighthouse
+
+      - name: Resolve motion comparison baseline
+        id: motion_baseline
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          baseline_ref="${PR_BASE_SHA:-}"
+          if [ -z "$baseline_ref" ]; then
+            baseline_ref="$(git rev-parse --verify HEAD^ 2>/dev/null || true)"
+          fi
+          echo "ref=$baseline_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout motion comparison baseline
+        if: steps.motion_baseline.outputs.ref != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.motion_baseline.outputs.ref }}
+          path: .motion-baseline
+          persist-credentials: false
+
+      - name: Build and measure unchanged baseline on the same runner
+        if: steps.motion_baseline.outputs.ref != ''
+        run: |
+          npm ci --prefix .motion-baseline
+          PERF_SERVER_ROOT=.motion-baseline node scripts/run-motion-ci.mjs --build
+          PERF_RECORD_BASELINE=1 PERF_SERVER_ROOT=.motion-baseline PERF_OUTPUT=.performance-results/baseline.json node scripts/run-motion-ci.mjs
+
+      - name: Motion-enabled constrained-device regression gate
+        env:
+          PERF_BASELINE: ${{ steps.motion_baseline.outputs.ref != '' && '.performance-results/baseline.json' || '' }}
+        run: node scripts/run-motion-ci.mjs
+
+      - name: Upload motion performance measurements
+        if: always() && hashFiles('.performance-results/**') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: motion-performance
+          path: .performance-results/
+          include-hidden-files: true
+          retention-days: 7
+
+      - name: Upload Lighthouse reports
+        if: always() && hashFiles('.lighthouseci/**') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lighthouse-results
+          path: .lighthouseci/
+          include-hidden-files: true
+          retention-days: 7
+
+      - name: Stop isolated Supabase stack
+        if: always() && env.SUPABASE_CI_WORKDIR != ''
+        continue-on-error: true
+        run: supabase stop --no-backup --workdir "$SUPABASE_CI_WORKDIR"
