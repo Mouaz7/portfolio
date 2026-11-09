@@ -37,7 +37,10 @@ test("short desktop windows keep every public page usable", async ({ page }) => 
 
   for (const check of checks) {
     await page.goto(`${check.route}?audit=performance`, { waitUntil: "domcontentloaded" });
-    await expect(page.locator(check.ready).first(), check.route).toBeVisible();
+    // React reveals streamed content on the next animation frame. WebKit 27
+    // can hold that frame until the page's images have loaded when the same
+    // tab navigates again, so the content may appear a few seconds later.
+    await expect(page.locator(check.ready).first(), check.route).toBeVisible({ timeout: 15_000 });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
       check.route,
